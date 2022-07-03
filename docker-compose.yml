@@ -1,0 +1,77 @@
+version: '2'
+
+services:
+  spark:
+    image: docker.io/bitnami/spark:3.0.2
+    environment:
+      - SPARK_MODE=master
+      # - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      # - SPARK_RPC_ENCRYPTION_ENABLED=no
+      # - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      # - SPARK_SSL_ENABLED=no
+      - SPARK_MASTER_OPTS=-javaagent:/opt/prometheus/jars/jmx_prometheus_javaagent-0.17.0.jar=9999:/opt/prometheus/prometheus-config.yaml
+    ports:
+      - '8080:8080'
+      - '7077:7077'
+    volumes: 
+      - ./jars:/opt/prometheus/jars
+      - ./prometheus-config.yaml:/opt/prometheus/prometheus-config.yaml
+      - ./metrics.properties:/opt/bitnami/spark/conf/metrics.properties
+      - ./spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+    networks:
+      - metrics
+
+  spark-worker-1:
+    image: docker.io/bitnami/spark:3.0.2
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark:7077
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_WORKER_CORES=1
+      # - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      # - SPARK_RPC_ENCRYPTION_ENABLED=no
+      # - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      # - SPARK_SSL_ENABLED=no
+      - SPARK_WORKER_OPTS=-javaagent:/opt/prometheus/jars/jmx_prometheus_javaagent-0.17.0.jar=9999:/opt/prometheus/prometheus-config.yaml
+    volumes:
+      - ./jars:/opt/prometheus/jars
+      - ./prometheus-config.yaml:/opt/prometheus/prometheus-config.yaml
+      - ./metrics.properties:/opt/bitnami/spark/conf/metrics.properties
+      - ./spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+    networks:
+      - metrics
+
+  prometheus:
+    image: bitnami/prometheus:2.36.2
+    restart: always
+    ports:
+      - 9090:9090
+    volumes:
+      - ./prometheus:/etc/prometheus/
+      - ./prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      - metrics
+
+  grafana:
+    image: grafana/grafana:7.5.16-ubuntu
+    user: '472'
+    restart: always
+    volumes:
+      # - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning/:/etc/grafana/provisioning/
+    env_file:
+      - ./grafana/config.monitoring
+    ports:
+      - 3000:3000
+    networks:
+      - metrics
+
+networks:
+  metrics:
+    name: metrics
+    external: true
